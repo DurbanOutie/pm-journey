@@ -4,28 +4,32 @@ import sira4j.Sira;
 import sira4j.Canvas;
 
 public class Game{
-    
-    static GameData g = new GameData();
     static Canvas canvas = new Canvas(new int[0], 0, 0);
+    static GameData g = new GameData();
     static Controller c = new Controller();
+    static int counter = 0;
 
-    public static void mapCanvas(int[] pixels, int x, int y, int w, int h, int stride){
-        canvas.w = w;
-        canvas.h = h;
+    public static void updateAndRender(Object d){
+
+        if(counter++ > 30){
+            counter = 0;
+        }
+
+
+
+
+        int[] pixels = (int[])((Object[])d)[0];
+        int[] meta = (int[])((Object[])d)[1];
+        int[] controllerData = (int[])((Object[])d)[2];
+
+        c.map(controllerData);
+
         canvas.pixels = pixels;
-        canvas.x = x;
-        canvas.y = y;
-        canvas.stride = stride;
-    }
-
-    public static void mapGameData(int[] data){
-
-    }
-    public static void mapController(int[] data){
-    }
-
-
-    public static void updateAndRender(){
+        canvas.w = meta[0];
+        canvas.h = meta[1];
+        canvas.y = meta[2];
+        canvas.x = meta[3];
+        canvas.stride = meta[4];
 
 
         if(!g.initialised){
@@ -43,23 +47,22 @@ public class Game{
             g.initialised = true;
         }
 
-
-        if(c.moveUp.endedDown){
+        if(c.moveUpEndedDown()){
             g.y1 -= 10;
             g.y2 -= 10;
             g.y3 -= 10;
         }
-        if(c.moveDown.endedDown){
+        if(c.moveDownEndedDown()){
             g.y1 += 10;
             g.y2 += 10;
             g.y3 += 10;
         }
-        if(c.moveLeft.endedDown){
+        if(c.moveLeftEndedDown()){
             g.x1 -= 10;
             g.x2 -= 10;
             g.x3 -= 10;
         }
-        if(c.moveRight.endedDown){
+        if(c.moveRightEndedDown()){
             g.x1 += 10;
             g.x2 += 10;
             g.x3 += 10;
@@ -70,11 +73,26 @@ public class Game{
         if(g.y1 < 0) g.y1 = 0;
         if(g.y1 > canvas.h) g.y1 = canvas.h;
 
-        Sira.drawString(canvas, g.x3, g.y3, "Test", 0xFFFF0000);
+        Sira.fillRect(canvas, 0, 0, canvas.w, canvas.h, 0xFF000000);
 
-        Sira.fillCircle(canvas, g.x1, g.y1, 100, 0xFF00FFFF);
+        
+
+        Sira.fillCircle(canvas, g.x1, g.y1, 100, 0xFF999900);
+        Sira.drawString(canvas, 20, 20, "My Name is What!!!", 5, 0xFFFF0000);
+        Sira.drawString(canvas, 1300, 800, "Frame: " + counter, 5, 0xFFFF0000);
+
+
+
+        String s = "Player pos: " + g.x1 + ", " + g.y1 + "\n";
+        s += "Player col: " + g.color + "\n";
+
+
+
+
+
+
+        Sira.drawString(canvas, 1200, 400, s, 3, 0xFFFF0000);
 
     }
 
 }
-
