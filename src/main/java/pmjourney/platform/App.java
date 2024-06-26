@@ -1,6 +1,6 @@
 package pmjourney.platform;
 
-import pmjourney.game.Controller;
+import static pmjourney.platform.ByteWriter.writeBytes;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
@@ -13,15 +13,22 @@ import java.lang.reflect.*;
 import java.nio.file.*;
 import java.io.*;
 
-
+/*
+ * 4 Things we need from the platform
+ * 1. Timing
+ * 2. Input
+ * 3. imageBuffer
+ * 4. soundbuffer
+ *
+ */
 
 public class App{
     KL keyListener;
-    ML mouseListener = new ML();
+    ML mouseListener;
     Graphics2D graphics;
     BufferedImage imageBuffer; 
     Graphics imageBufferGraphics;
-    Object[] d = new Object[3];
+    Object[] d = new Object[4];
     int[] imageDataRaw;
     int[] imageDataMeta;
     boolean appRunning = false;
@@ -30,7 +37,7 @@ public class App{
     int WIDTH;
     int HEIGHT;
     Window window;
-    Controller controller;
+    PlatformController pc;
     public App(String title, int w, int h){
         this.title = title;
         this.WIDTH = w;
@@ -38,9 +45,15 @@ public class App{
     }
 
     public void init(){
+
+        pc = new PlatformController();
+
+
+
+
         
-        controller = new Controller();
-        keyListener = new KL(controller);
+        keyListener = new KL(pc);
+        mouseListener = new ML(pc);
 
         window = new Window(
                 title,
@@ -51,16 +64,13 @@ public class App{
 
         // Handle to window graphics and backbuffer graphics
         graphics = (Graphics2D)window.getGraphics();
-
         imageBuffer = (BufferedImage)window.createImage(WIDTH, HEIGHT);
-
         imageDataRaw = ((DataBufferInt)(imageBuffer.getRaster()
                     .getDataBuffer())).getData();
-        imageDataMeta = new int[]{WIDTH, HEIGHT, 0, 0, WIDTH};
+        imageDataMeta = new int[]{WIDTH, HEIGHT};
 
         d[0] = imageDataRaw;
         d[1] = imageDataMeta;
-
 
     }
 
@@ -78,36 +88,56 @@ public class App{
             System.out.println(i + ". " + klass.getDeclaredMethods()[i]);
         }
 
-        Method updateAndRender = klass.getDeclaredMethods()[0];
+        Method updateAndRender = klass.getDeclaredMethods()[1];
 
         File f = new File("build/classes/" + className.replaceAll("\\.", "/") + ".class");
 
         long lastModified = 0;
+        boolean paused = false;
+
         while(appRunning){
 
-            d[2] = controller.getRaw();
 
-            try{
 
-                if(f.lastModified() - lastModified > 0){
-                    System.out.println("Game Code Stale...Updating it");
-                    myClassLoader = new MyClassLoader();
-                    klass = myClassLoader.loadClass(className);
-                    if(klass!=null){
-                        lastModified = f.lastModified();
-                        updateAndRender = klass.getDeclaredMethods()[0];
-                    }else{
-                        System.out.println("Failed Loading Game Code...");
-                    }
+            if(!paused){
+
+                if(pc.getButtonEndedDown(PlatformController.PAUSE)){
+                    paused = true;
                 }
 
-                updateAndRender.invoke(null, (Object)d);
-            }catch(LinkageError | IllegalAccessException | InvocationTargetException e){
-                e.printStackTrace();
-                System.out.println("Waiting for impl of Methods...");
-            }
+                d[3] = pc.getData();
 
-            graphics.drawImage(imageBuffer, 0, 0, window);
+                //for(int i = 0; i < 30; ++i){
+                //    System.out.print(String.format("%d-[%d], ", i, pc.getData()[i]));
+                //}
+                //System.out.println();
+
+                try{
+
+                    if(f.lastModified() - lastModified > 0){
+                        System.out.println("Game Code Stale...Updating it");
+                        myClassLoader = new MyClassLoader();
+                        klass = myClassLoader.loadClass(className);
+                        if(klass!=null){
+                            lastModified = f.lastModified();
+                            updateAndRender = klass.getDeclaredMethods()[1];
+                        }else{
+                            System.out.println("Failed Loading Game Code...");
+                        }
+                    }
+
+                    updateAndRender.invoke(null, (Object)d);
+                }catch(LinkageError | IllegalAccessException | InvocationTargetException e){
+                    e.printStackTrace();
+                    System.out.println("Waiting for impl of Methods...");
+                }
+
+                graphics.drawImage(imageBuffer, 0, 0, window);
+            }else{
+                if(pc.getButtonEndedDown(PlatformController.PAUSE)){
+                    paused = false;
+                }
+            }
             try{
                 Thread.sleep(16);
             }catch(Exception e){
@@ -185,10 +215,10 @@ class KL implements KeyListener{
         // Dont process both.
     }
 
-    Controller controller;
+    PlatformController pc;
 
-    public KL(Controller controller){
-        this.controller = controller;
+    public KL(PlatformController pc){
+        this.pc = pc;
     }
 
     boolean[] wasDownKeys = new boolean[26];
@@ -206,22 +236,21 @@ class KL implements KeyListener{
         
         if(wasDown!=isDown){
             if(e.getKeyCode()==KeyEvent.VK_W){
-                processKeyMessage(controller.buttonStates[0], isDown);
+                processKeyMessage(pc, PlatformController.MOVE_UP, isDown);
             }
             if(e.getKeyCode()==KeyEvent.VK_S){
-                processKeyMessage(controller.buttonStates[1], isDown);
+                processKeyMessage(pc, PlatformController.MOVE_DOWN, isDown);
             }
             if(e.getKeyCode()==KeyEvent.VK_A){
-                processKeyMessage(controller.buttonStates[2], isDown);
+                processKeyMessage(pc, PlatformController.MOVE_LEFT, isDown);
             }
             if(e.getKeyCode()==KeyEvent.VK_D){
-                processKeyMessage(controller.buttonStates[3], isDown);
+                processKeyMessage(pc, PlatformController.MOVE_RIGHT, isDown);
             }
-
-            controller.raw[1] = controller.moveUpEndedDown()?1:0;
-            controller.raw[3] = controller.moveDownEndedDown()?1:0;
-            controller.raw[5] = controller.moveLeftEndedDown()?1:0;
-            controller.raw[7] = controller.moveRightEndedDown()?1:0;
+            
+            if(e.getKeyCode()==KeyEvent.VK_P){
+                processKeyMessage(pc, PlatformController.PAUSE, isDown);
+            }
 
         }else{
             //Dont do anything for repeating events yet
@@ -233,35 +262,232 @@ class KL implements KeyListener{
         }
     }
 
-    private void processKeyMessage(int[] buttonState, boolean isDown){
-        if(buttonState[1]!=(isDown?1:0)){
-            buttonState[1] = isDown?1:0;
-            buttonState[0] += 1;
+    private void processKeyMessage(PlatformController pc, byte button, boolean isDown){
+        if(pc.getButtonState(button) !=(isDown?1:0)){
+            pc.setButtonState(button, isDown);
         }
+
     }
 }
 
 class ML extends MouseAdapter implements MouseMotionListener{
     boolean isPressed;
     double x, y;
+    PlatformController pc;
+
+    public ML(PlatformController pc){
+        this.pc = pc;
+    }
    
     @Override 
     public void mousePressed(MouseEvent e){
+        processKeyMessage(pc, PlatformController.MOUSE_1, true);
         isPressed = true;
     }
 
     @Override 
     public void mouseReleased(MouseEvent e){
+        processKeyMessage(pc, PlatformController.MOUSE_1, false);
         isPressed = false;
     }
     
     @Override 
     public void mouseMoved(MouseEvent e){
+
+        
         x = e.getX();
         y = e.getY();
+
+        writeBytes(pc.getData(), PlatformController.MOUSE_X, (int)x);
+        writeBytes(pc.getData(), PlatformController.MOUSE_Y, (int)y);
+
+
+
+    }
+    
+    private void processKeyMessage(PlatformController pc, byte button, boolean isDown){
+        if(pc.getButtonState(button) !=(isDown?1:0)){
+            pc.setButtonState(button, isDown);
+        }
+
     }
 }
 
+class PlatformController{
 
+    public static final byte BUTTON_COUNT = 11;
+    public static final byte BUTTON_SIZE = 2;
+    public static final byte MOUSE_COORD_SIZE = 4;
+    public static final byte MOVE_UP;
+    public static final byte MOVE_DOWN;
+    public static final byte MOVE_LEFT;
+    public static final byte MOVE_RIGHT;
+    public static final byte ACTION_UP;
+    public static final byte ACTION_DOWN;
+    public static final byte ACTION_LEFT;
+    public static final byte ACTION_RIGHT;
+    public static final byte START;
+    public static final byte PAUSE;
+    public static final byte MOUSE_1;
+    public static final byte MOUSE_X;
+    public static final byte MOUSE_Y;
 
+    private byte[] data = new byte[128];
+    private static final byte[] d = new byte[128];
+
+    /*
+     *
+     * Format:
+     * header - 2 bytes - default "PC"
+     * number of controllers - 1 byte
+     * length of controller data - 1byte
+     * controller data - composite
+     * for each button listed in order there is several data points.
+     * number of buttons
+     * 1. move up
+     * 2. move down
+     * 3. move left
+     * 4. move right
+     * 5. action 1
+     * 6. action 2
+     * 7. start
+     * 8. pause
+     * more to come
+     * data per button
+     * isDown - 1 byte
+     * wasDown - 1 byte
+     *
+     *
+     */
+
+    static{
+        int p = 0;
+        p = writeBytes(d, p, "PC");                         // 0 - 87 , 1 - 67
+        p = writeBytes(d, p, BUTTON_COUNT);                 // 2 - 5
+        MOVE_UP = (byte)(p + BUTTON_COUNT);  
+        p = writeBytes(d, p, MOVE_UP);                      //3 - 8
+                                                            //
+        MOVE_DOWN = (byte)(MOVE_UP + BUTTON_SIZE);
+        p = writeBytes(d, p, MOVE_DOWN);                    //4 - 10
+                                                            //
+        MOVE_LEFT = (byte)(MOVE_DOWN + BUTTON_SIZE);
+        p = writeBytes(d, p, MOVE_LEFT);                    //5 - 12
+                                                            //
+        MOVE_RIGHT = (byte)(MOVE_LEFT + BUTTON_SIZE);
+        p = writeBytes(d, p, MOVE_RIGHT);                   //6 - 14
+                                                            //
+        ACTION_UP = (byte)(MOVE_RIGHT + BUTTON_SIZE);  
+        p = writeBytes(d, p, ACTION_UP);                      //3 - 8
+                                                              //
+        ACTION_DOWN = (byte)(ACTION_UP + BUTTON_SIZE);
+        p = writeBytes(d, p, ACTION_DOWN);                    //4 - 10
+                                                              //
+        ACTION_LEFT = (byte)(ACTION_DOWN + BUTTON_SIZE);
+        p = writeBytes(d, p, ACTION_LEFT);                    //5 - 12
+                                                              //
+        ACTION_RIGHT = (byte)(ACTION_LEFT + BUTTON_SIZE);
+        p = writeBytes(d, p, ACTION_RIGHT);                   //6 - 14
+                                                              //
+        START = (byte)(ACTION_RIGHT + BUTTON_SIZE);
+        p = writeBytes(d, p, START);                   //6 - 14
+                                                              
+        PAUSE = (byte)(START + BUTTON_SIZE);
+        p = writeBytes(d, p, PAUSE);                   //6 - 14
+                                                              
+        MOUSE_1 = (byte)(PAUSE + BUTTON_SIZE);
+        p = writeBytes(d, p, MOUSE_1);                     //7 - 16
+                                                           //
+        MOUSE_X = (byte)(MOUSE_1 + BUTTON_SIZE);
+        p = writeBytes(d, p, MOUSE_X);                     //7 - 16
+        MOUSE_Y = (byte)(MOUSE_X + MOUSE_COORD_SIZE);
+        p = writeBytes(d, p, MOUSE_Y);                     //7 - 16
+    }
+
+    {
+        int p = 0;
+        p = writeBytes(data, p, d);
+    }
+    public void setButtonState(byte key, boolean isDown){
+        data[key] = (byte)(isDown?1:0);
+    }
+    public byte getButtonState(byte key){
+        return data[key];
+    }
+    public boolean getButtonEndedDown(byte key){
+        return data[key]==1?true:false;
+    }
+    public int getMouseCoord(byte key){
+        
+        int i = ((data[key + 0] & 0xFF) <<  0) |
+                ((data[key + 1] & 0xFF) <<  8) |
+                ((data[key + 2] & 0xFF) << 16) |
+                ((data[key + 3] & 0xFF) << 24) ;
+
+        return i;
+
+    }
+
+    public byte[] getData(){
+        return data;
+    }
+
+    public void setData(byte[] data){
+        this.data = data;
+    }
+}
+
+class ByteWriter{
+
+    static int writeBytes(byte[] data, int pointer, byte b){
+        data[pointer++] = b;
+        return pointer;
+    }
+    static int writeBytes(byte[] data, int pointer, byte[] b){
+        for(int i = 0; i < b.length; ++i){
+            data[pointer++] = b[i];
+        }
+        
+        return pointer;
+    }
+    
+    static int writeBytes(byte[] data, int pointer, char c){
+        data[pointer++] = (byte)c;
+        return pointer;
+    }
+    
+    static int writeBytes(byte[] data, int pointer, int i){
+        data[pointer++] = (byte)((i >>  0) & 0xFF);
+        data[pointer++] = (byte)((i >>  8) & 0xFF);
+        data[pointer++] = (byte)((i >> 16) & 0xFF);
+        data[pointer++] = (byte)((i >> 24) & 0xFF);
+        return pointer;
+    }
+    
+    static int writeBytes(byte[] data, int pointer, long l){
+        data[pointer++] = (byte)((l >>  0) & 0xFF);
+        data[pointer++] = (byte)((l >>  8) & 0xFF);
+        data[pointer++] = (byte)((l >> 16) & 0xFF);
+        data[pointer++] = (byte)((l >> 24) & 0xFF);
+        data[pointer++] = (byte)((l >> 32) & 0xFF);
+        data[pointer++] = (byte)((l >> 40) & 0xFF);
+        data[pointer++] = (byte)((l >> 48) & 0xFF);
+        data[pointer++] = (byte)((l >> 56) & 0xFF);
+        return pointer;
+    }
+    
+    static int writeBytes(byte[] data, int pointer, double d){
+
+        long l = Double.doubleToLongBits(d);
+        writeBytes(data, pointer, d);
+
+        return pointer;
+    }
+
+    static int writeBytes(byte[] data, int pointer, String s){
+        for(char c: s.toCharArray()){
+            pointer = writeBytes(data, pointer, c);
+        }
+        return pointer;
+    }
+}
 

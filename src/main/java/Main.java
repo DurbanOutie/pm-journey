@@ -1,7 +1,7 @@
 import pmjourney.platform.App;
 
 public class Main{
-    static final int SCALE = 100;
+    static final int SCALE = 60;
     public static void main(String[] args){
         App app = new App("Title", 16*SCALE, 9*SCALE);
         app.init();
